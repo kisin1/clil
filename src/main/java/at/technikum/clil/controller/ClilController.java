@@ -14,8 +14,8 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/clil")
-@CrossOrigin(origins = {"http://localhost:63342", "http://localhost:5173"})
-
+//@CrossOrigin(origins = {"http://localhost:63342", "http://localhost:5173"})
+@CrossOrigin(origins = "*")
 public class ClilController {
 
     private final ClilService clilService;
@@ -34,7 +34,7 @@ public class ClilController {
                         request.getTopic(),
                         request.getPrompt()
                 )
-                .timeout(Duration.ofSeconds(60))
+                .timeout(Duration.ofSeconds(120))
                 .map(ResponseEntity::ok)
                 .onErrorReturn(ResponseEntity.internalServerError()
                         .body(ClilResponse.builder()
