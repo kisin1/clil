@@ -28,49 +28,71 @@
 
     <!-- Statistik-Übersicht -->
     <v-row class="mt-4">
-      <v-col
-        v-for="(stat, index) in materialStats"
-        :key="`stat-${index}`"
-        cols="12"
-        sm="6"
-        md="3"
-      >
-        <v-card elevation="1" class="rounded-lg fill-height d-flex flex-column">
-          <v-card-text class="pa-4 flex-grow-1">
-            <div class="d-flex justify-space-between align-start">
-              <div>
-                <div class="text-h4 font-weight-bold">
-                  <v-skeleton-loader
-                    v-if="loading"
-                    type="text"
-                    width="60"
-                    height="40"
-                  ></v-skeleton-loader>
-                  <template v-else>{{ stat.value }}</template>
-                </div>
-                <div class="text-subtitle-1 text-medium-emphasis">{{ stat.label }}</div>
-              </div>
-              <v-avatar
-                :color="stat.color + '-lighten-4'" 
-                size="48"
-                class="elevation-0 rounded-circle"
-              >
-                <v-icon size="24" :color="stat.color">{{ stat.icon }}</v-icon>
-              </v-avatar>
-            </div>
-            <div
-              v-if="stat.trend !== undefined" 
-              class="mt-2 text-caption d-flex align-center"
-              :class="stat.trend >= 0 ? 'text-success' : 'text-error'"
-            >
-              <v-icon size="small" :color="stat.trend >= 0 ? 'success' : 'error'">
-                {{ stat.trend >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
-              </v-icon>
-              <span class="ml-1">{{ Math.abs(stat.trend) }}% vs. Vormonat</span>
-            </div>
-          </v-card-text>
+      <v-col cols="12" v-if="materialsStore.materials.length === 0 && !loading">
+        <v-card elevation="1" class="rounded-lg pa-6 text-center">
+          <v-icon size="64" color="primary" class="mb-4">mdi-file-document-plus</v-icon>
+          <h3 class="text-h5 mb-2">Noch keine Materialien vorhanden</h3>
+          <p class="text-body-1 mb-4">Erstellen Sie Ihr erstes CLIL-Unterrichtsmaterial mit KI-Unterstützung.</p>
+          <v-btn
+            color="primary"
+            size="large"
+            to="/create"
+            class="px-6"
+          >
+            <v-icon start>mdi-plus</v-icon>
+            Material erstellen
+          </v-btn>
         </v-card>
       </v-col>
+      <template v-else>
+        <v-col
+          v-for="(stat, index) in materialStats"
+          :key="`stat-${index}`"
+          cols="12"
+          sm="6"
+          md="3"
+        >
+          <v-card elevation="1" class="rounded-lg fill-height d-flex flex-column">
+            <v-card-text class="pa-4 flex-grow-1">
+              <div class="d-flex justify-space-between align-start">
+                <div>
+                  <div class="text-h4 font-weight-bold">
+                    <v-skeleton-loader
+                      v-if="loading"
+                      type="text"
+                      width="60"
+                      height="40"
+                    ></v-skeleton-loader>
+                    <template v-else-if="materialsStore.error">
+                      <v-icon color="error">mdi-alert-circle</v-icon>
+                      Fehler
+                    </template>
+                    <template v-else>{{ stat.value || 0 }}</template>
+                  </div>
+                  <div class="text-subtitle-1 text-medium-emphasis">{{ stat.label }}</div>
+                </div>
+                <v-avatar
+                  :color="stat.color + '-lighten-4'" 
+                  size="48"
+                  class="elevation-0 rounded-circle"
+                >
+                  <v-icon size="24" :color="stat.color">{{ stat.icon }}</v-icon>
+                </v-avatar>
+              </div>
+              <div
+                v-if="stat.trend !== undefined" 
+                class="mt-2 text-caption d-flex align-center"
+                :class="stat.trend >= 0 ? 'text-success' : 'text-error'"
+              >
+                <v-icon size="small" :color="stat.trend >= 0 ? 'success' : 'error'">
+                  {{ stat.trend >= 0 ? 'mdi-arrow-up' : 'mdi-arrow-down' }}
+                </v-icon>
+                <span class="ml-1">{{ Math.abs(stat.trend) }}% vs. Vormonat</span>
+              </div>
+            </v-card-text>
+          </v-card>
+        </v-col>
+      </template>
     </v-row>
 
     <v-row class="mt-4">
@@ -255,11 +277,18 @@ function navigateToCreate(type, templateId = null) {
 // Materialien und Templates beim Laden der Komponente abrufen
 onMounted(async () => {
   if (materialsStore.materials.length === 0) {
+    console.log('Lade Materialien...');
     await materialsStore.fetchMaterials();
+    console.log('Materialien geladen:', materialsStore.materials);
   }
   if (templatesStore.templates.length === 0) {
+    console.log('Lade Templates...');
     await templatesStore.fetchTemplates();
+    console.log('Templates geladen:', templatesStore.templates);
   }
+  
+  // Debug-Ausgabe für Statistiken
+  console.log('Material Stats:', materialStats.value);
 });
 
 </script>

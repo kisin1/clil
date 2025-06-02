@@ -2,9 +2,11 @@ package at.technikum.clil.controller;
 
 import at.technikum.clil.dto.ClilResponse;
 import at.technikum.clil.dto.LessonMaterialDto;
+import at.technikum.clil.dto.MaterialCreateRequest;
 import at.technikum.clil.dto.MaterialRequest;
-import at.technikum.clil.repository.LessonMaterialRepository;
+import at.technikum.clil.dto.MaterialUpdateRequest;
 import at.technikum.clil.service.ClilService;
+import at.technikum.clil.service.MaterialService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
@@ -19,11 +21,11 @@ import java.util.List;
 public class ClilController {
 
     private final ClilService clilService;
-    private final LessonMaterialRepository repository;
+    private final MaterialService materialService;
 
-    public ClilController(ClilService clilService, LessonMaterialRepository repository) {
+    public ClilController(ClilService clilService, MaterialService materialService) {
         this.clilService = clilService;
-        this.repository = repository;
+        this.materialService = materialService;
     }
 
     @PostMapping("/generate")
@@ -32,7 +34,13 @@ public class ClilController {
         return clilService.generateMaterial(
                         request.getMaterialType(),
                         request.getTopic(),
-                        request.getPrompt()
+                        request.getPrompt(),
+                        request.getSubject(),
+                        request.getLanguageLevel(),
+                        request.getVocabPercentage(),
+                        request.getContentFocus(),
+                        request.getIncludeVocabList(),
+                        request.getDescription()
                 )
                 .timeout(Duration.ofSeconds(120))
                 .map(ResponseEntity::ok)
@@ -44,29 +52,46 @@ public class ClilController {
 
     @GetMapping("/materials")
     public ResponseEntity<List<LessonMaterialDto>> getAllMaterials() {
-        List<LessonMaterialDto> dtos = repository.findAllOrderByCreatedAtDesc()
-                .stream()
-                .map(LessonMaterialDto::fromEntity)
-                .toList();
-
-        return ResponseEntity.ok(dtos);
+        List<LessonMaterialDto> materials = materialService.getAllMaterials();
+        return ResponseEntity.ok(materials);
     }
 
 
 
     @GetMapping("/materials/{id}")
     public ResponseEntity<LessonMaterialDto> getMaterial(@PathVariable Long id) {
-        return repository.findById(id)
-                .map(LessonMaterialDto::fromEntity)
+        return materialService.getMaterialById(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @PostMapping("/materials")
+    public ResponseEntity<LessonMaterialDto> createMaterial(
+            @RequestBody MaterialCreateRequest request) {
+        try {
+            LessonMaterialDto created = materialService.createMaterial(request);
+            return ResponseEntity.ok(created);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    @PutMapping("/materials/{id}")
+    public ResponseEntity<LessonMaterialDto> updateMaterial(
+            @PathVariable Long id,
+            @RequestBody MaterialUpdateRequest request) {
+        try {
+            return materialService.updateMaterial(id, request)
+                    .map(ResponseEntity::ok)
+                    .orElse(ResponseEntity.notFound().build());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
 
     @DeleteMapping("/materials/{id}")
     public ResponseEntity<Void> deleteMaterial(@PathVariable Long id) {
-        if (repository.existsById(id)) {
-            repository.deleteById(id);
+        if (materialService.deleteMaterial(id)) {
             return ResponseEntity.noContent().build();
         }
         return ResponseEntity.notFound().build();

@@ -30,7 +30,41 @@ public class ClilService {
         this.repository = repository;
     }
 
-    public Mono<ClilResponse> generateMaterial(String materialType, String topic, String userPrompt) {
+    public Mono<ClilResponse> generateMaterial(
+            String materialType, 
+            String topic, 
+            String userPrompt,
+            String subject,
+            String languageLevel,
+            Integer vocabPercentage,
+            String contentFocus,
+            Boolean includeVocabList,
+            String description) {
+        
+        // Validate required parameters
+        if (materialType == null || materialType.trim().isEmpty()) {
+            return Mono.error(new IllegalArgumentException("Material type cannot be null or empty"));
+        }
+        if (topic == null || topic.trim().isEmpty()) {
+            return Mono.error(new IllegalArgumentException("Topic cannot be null or empty"));
+        }
+        if (userPrompt == null || userPrompt.trim().isEmpty()) {
+            return Mono.error(new IllegalArgumentException("User prompt cannot be null or empty"));
+        }
+        if (subject == null || subject.trim().isEmpty()) {
+            return Mono.error(new IllegalArgumentException("Subject cannot be null or empty"));
+        }
+
+        // Set default values for optional parameters
+        final String finalLanguageLevel = (languageLevel != null && !languageLevel.trim().isEmpty()) ? languageLevel : "B1";
+        final Integer finalVocabPercentage = (vocabPercentage != null) ? vocabPercentage : 30;
+        final String finalContentFocus = (contentFocus != null && !contentFocus.trim().isEmpty()) ? contentFocus : "balanced";
+        final Boolean finalIncludeVocabList = (includeVocabList != null) ? includeVocabList : true;
+        final String finalDescription = (description != null) ? description : "";
+        final String finalMaterialType = materialType.trim();
+        final String finalTopic = topic.trim();
+        final String finalSubject = subject.trim();
+
         // Get system prompt - enhanced for HTML output
         String systemPrompt = promptService.getTrainingPrompt();
         String enhancedUserPrompt = userPrompt +
@@ -70,23 +104,30 @@ public class ClilService {
                     }
                     String aiContent = response.getChoices().getFirst().getMessage().getContent();
 
-                    // Save to database with materialType and topic for organization
-                    LessonMaterial material = LessonMaterial.builder()
-                            .materialType(materialType)
-                            .topic(topic)
-                            .aiResponse(aiContent)
-                            .build();
+                    // Generate tags from subject and topic
+                    List<String> tags = List.of(
+                        finalSubject.toLowerCase(),
+                        finalTopic.toLowerCase().split("\\s+")[0]
+                    ).stream()
+                    .filter(tag -> !tag.isEmpty())
+                    .toList();
 
-                    return Mono.fromCallable(() -> repository.save(material))
-                            .subscribeOn(Schedulers.boundedElastic())
-                            .thenReturn(ClilResponse.builder()
-                                    .formattedResponse(aiContent)
-                                    .build());
+                    // Return response without saving to database
+                    return Mono.just(ClilResponse.builder()
+                            .formattedResponse(aiContent)
+                            .build());
                 }).onErrorResume(error -> {
-                    // Error handling
+                    String errorMessage;
+                    if (error instanceof IllegalArgumentException) {
+                        errorMessage = error.getMessage();
+                    } else if (error instanceof IllegalStateException) {
+                        errorMessage = "API Error: " + error.getMessage();
+                    } else {
+                        errorMessage = "Unexpected error occurred: " + error.getMessage();
+                    }
                     return Mono.just(ClilResponse.builder()
                             .formattedResponse("<div class='error'><h3>Error generating content</h3><p>" +
-                                    error.getMessage() + "</p></div>")
+                                    errorMessage + "</p></div>")
                             .build());
                 });
     }

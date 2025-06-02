@@ -29,7 +29,7 @@ const routes = [
     path: '/edit/:id',
     name: 'edit',
     component: EditMaterial,
-    props: true,
+    props: route => ({ id: route.params.id }),
     meta: { title: 'Material bearbeiten' }
   },
   {
@@ -72,13 +72,48 @@ const routes = [
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
+  routes,
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition
+    } else {
+      return { top: 0 }
+    }
+  }
 })
 
-// Dynamischen Titel setzen
-router.beforeEach((to, from, next) => {
-  document.title = to.meta.title ? `${to.meta.title} | CLIL-KI-Tool` : 'CLIL-KI-Tool'
-  next()
+// Global error handler für Router
+router.onError((error) => {
+  console.error('Router error:', error)
+  // Fallback to home if component loading fails
+  if (error.message.includes('Failed to fetch dynamically imported module')) {
+    window.location.href = '/'
+  }
+})
+
+// Navigation Guards mit besserem Error Handling
+router.beforeEach(async (to, from, next) => {
+  try {
+    // Dynamischen Titel setzen
+    document.title = to.meta.title ? `${to.meta.title} | CLIL-KI-Tool` : 'CLIL-KI-Tool'
+    
+    // Überprüfe ob die Route existiert
+    if (!to.matched.length) {
+      console.warn('No matching route found for:', to.path)
+      next({ name: 'not-found' })
+      return
+    }
+    
+    next()
+  } catch (error) {
+    console.error('Navigation guard error:', error)
+    next(false)
+  }
+})
+
+// Globaler after hook für debugging
+router.afterEach((to, from) => {
+  console.log('Navigation completed:', from.path, '->', to.path)
 })
 
 export default router 

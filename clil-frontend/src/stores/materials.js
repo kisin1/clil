@@ -1,41 +1,9 @@
 import { defineStore } from 'pinia'
-import { v4 as uuidv4 } from 'uuid'
+import materialsService from '@/services/materialsService'
 
 export const useMaterialsStore = defineStore('materials', {
   state: () => ({
-    materials: [
-      {
-        id: 'mat-001',
-        title: 'Programmierung: Schleifen und Kontrollstrukturen',
-        type: 'worksheet',
-        created: '2025-04-24',
-        modified: '2025-04-24',
-        subject: 'Informatik',
-        content: '<h1>Schleifen und Kontrollstrukturen</h1><p>Dies ist ein Beispielinhalt...</p>',
-        language: {
-          level: 'B1',
-          vocabPercentage: 30
-        },
-        tags: ['programmierung', 'schleifen', 'kontrollstrukturen'],
-        favorite: false
-      },
-      // Füge hier bei Bedarf weitere Mock-Materialien hinzu
-      {
-        id: 'mat-002',
-        title: 'Datenbanken: SQL Grundlagen',
-        type: 'quiz',
-        created: '2025-04-20',
-        modified: '2025-04-22',
-        subject: 'Datenbanken',
-        content: '<h2>SQL Quiz</h2><p>Frage 1...</p>',
-        language: {
-          level: 'A2',
-          vocabPercentage: 20
-        },
-        tags: ['sql', 'datenbanken', 'quiz'],
-        favorite: true
-      },
-    ],
+    materials: [],
     loading: false,
     error: null
   }),
@@ -46,14 +14,12 @@ export const useMaterialsStore = defineStore('materials', {
     },
 
     sortedMaterials: (state) => {
-      // Erstellt eine Kopie, bevor sortiert wird
       return [...state.materials].sort((a, b) =>
         new Date(b.modified) - new Date(a.modified)
       )
     },
 
     recentMaterials: (state) => {
-       // Erstellt eine Kopie, bevor sortiert wird
       return [...state.materials]
         .sort((a, b) => new Date(b.created) - new Date(a.created))
         .slice(0, 5)
@@ -68,114 +34,220 @@ export const useMaterialsStore = defineStore('materials', {
         grouped[material.type].push(material)
       })
       return grouped
-    }
+    },
+
+    favoriteMaterials: (state) => {
+      return state.materials.filter(m => m.favorite)
+    },
+
+    materialCount: (state) => state.materials.length
   },
 
   actions: {
+    /**
+     * Lädt alle Materialien vom Backend
+     */
     async fetchMaterials() {
       this.loading = true
+      this.error = null
+      
       try {
-        // Im Produktiveinsatz: API-Call
-        // z.B. const response = await api.getMaterials()
-        // Hier: Mock-Verzögerung
-        await new Promise(resolve => setTimeout(resolve, 500))
-        // Mock-Daten sind bereits im State vorhanden
-        this.loading = false
+        const materials = await materialsService.getAllMaterials()
+        this.materials = materials
       } catch (error) {
-        this.error = 'Fehler beim Laden der Materialien'
+        this.error = error.message
+        console.error('Store.fetchMaterials:', error)
+        throw error
+      } finally {
         this.loading = false
-        console.error(error)
       }
     },
 
+    /**
+     * Erstellt ein neues Material
+     */
     async addMaterial(materialData) {
-      this.loading = true; // Ladezustand setzen
+      this.loading = true;
+      this.error = null;
+      
+      console.log('[materialsStore] addMaterial received data:', JSON.stringify(materialData, null, 2));
+      
       try {
-        const newMaterial = {
-          id: `mat-${uuidv4().substring(0, 8)}`, // Kürzerer UUID
-          created: new Date().toISOString().split('T')[0],
-          modified: new Date().toISOString().split('T')[0],
-          favorite: false,
-          ...materialData
-        }
-
-        // Im Produktiveinsatz: API-Call
-        // z.B. const savedMaterial = await api.createMaterial(newMaterial)
-        await new Promise(resolve => setTimeout(resolve, 300)) // Simuliere API Call
-        this.materials.unshift(newMaterial) // Füge vorne hinzu für Sichtbarkeit
-        this.loading = false;
-        return newMaterial
+        const newMaterial = await materialsService.createMaterial(materialData);
+        
+        console.log('[materialsStore] Material created by service:', JSON.stringify(newMaterial, null, 2));
+        
+        this.materials.unshift(newMaterial); // Add to beginning for visibility
+        return newMaterial;
       } catch (error) {
-        this.error = 'Fehler beim Erstellen des Materials'
+        this.error = error.message;
+        console.error('[materialsStore] Error in addMaterial:', error);
+        throw error;
+      } finally {
         this.loading = false;
-        console.error(error)
-        throw error // Fehler weiterleiten für UI-Feedback
       }
     },
 
+    /**
+     * Aktualisiert ein bestehendes Material
+     */
     async updateMaterial(materialData) {
-      this.loading = true;
+      this.loading = true
+      this.error = null
+      
       try {
+        console.log('Store: Updating material:', materialData);
+        const updatedMaterial = await materialsService.updateMaterial(materialData)
+        console.log('Store: Received updated material:', updatedMaterial);
+        
+        // Update in store
         const index = this.materials.findIndex(m => m.id === materialData.id)
-
-        if (index === -1) {
-          throw new Error('Material nicht gefunden')
+        if (index !== -1) {
+          this.materials[index] = {
+            ...this.materials[index],
+            ...updatedMaterial,
+            modified: new Date().toISOString()
+          }
         }
-
-        const updatedMaterial = {
-          ...this.materials[index],
-          ...materialData,
-          modified: new Date().toISOString().split('T')[0]
-        }
-
-        // Im Produktiveinsatz: API-Call
-        // z.B. const savedMaterial = await api.updateMaterial(updatedMaterial)
-        await new Promise(resolve => setTimeout(resolve, 300))
-        this.materials[index] = updatedMaterial
-        this.loading = false;
+        
         return updatedMaterial
       } catch (error) {
-        this.error = 'Fehler beim Aktualisieren des Materials'
-        this.loading = false;
-        console.error(error)
+        this.error = error.message
+        console.error('Store.updateMaterial:', error)
         throw error
+      } finally {
+        this.loading = false
       }
     },
 
+    /**
+     * Löscht ein Material
+     */
     async deleteMaterial(id) {
-      this.loading = true;
+      this.loading = true
+      this.error = null
+      
       try {
-        // Im Produktiveinsatz: API-Call
-        // z.B. await api.deleteMaterial(id)
-        await new Promise(resolve => setTimeout(resolve, 300))
+        await materialsService.deleteMaterial(id)
+        
+        // Remove from store
         this.materials = this.materials.filter(m => m.id !== id)
-        this.loading = false;
       } catch (error) {
-        this.error = 'Fehler beim Löschen des Materials'
-        this.loading = false;
-        console.error(error)
+        this.error = error.message
+        console.error('Store.deleteMaterial:', error)
         throw error
+      } finally {
+        this.loading = false
       }
     },
 
+    /**
+     * Toggle Favorite Status (nur lokal, kein Backend-Call)
+     */
     toggleFavorite(id) {
       const material = this.materials.find(m => m.id === id)
       if (material) {
         material.favorite = !material.favorite
-        // Optional: Hier direkt ein Update anstoßen oder auf explizites Speichern warten
-        // this.updateMaterial(material); // Beispiel: Direktes Speichern
+        material.modified = new Date().toISOString().split('T')[0]
+        
+        // Optional: Update im Backend via updateMaterial
+        // this.updateMaterial(material)
+      }
+    },
+
+    /**
+     * Generiert neues Material via AI
+     */
+    async generateMaterial(materialType, params = {}) {
+      this.loading = true
+      this.error = null
+      
+      try {
+        const generatedData = await materialsService.generateMaterial(materialType, params)
+        
+        // Gebe nur die generierten Daten zurück, OHNE zu speichern
+        // Das Speichern erfolgt separat in der Komponente
+        return generatedData
+      } catch (error) {
+        this.error = error.message
+        console.error('Store.generateMaterial:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    /**
+     * Lädt ein einzelnes Material (für Details-View)
+     */
+    async fetchMaterialById(id) {
+      // Check if already in store
+      const existing = this.getMaterialById(id)
+      if (existing) {
+        return existing
+      }
+      
+      this.loading = true
+      this.error = null
+      
+      try {
+        const material = await materialsService.getMaterialById(id)
+        
+        // Add to store if not exists
+        if (!this.getMaterialById(id)) {
+          this.materials.push(material)
+        }
+        
+        return material
+      } catch (error) {
+        this.error = error.message
+        console.error('Store.fetchMaterialById:', error)
+        throw error
+      } finally {
+        this.loading = false
+      }
+    },
+
+    /**
+     * Filtert Materialien nach Typ
+     */
+    filterByType(type) {
+      if (!type) return this.materials
+      return this.materials.filter(m => m.type === type)
+    },
+
+    /**
+     * Sucht in Materialien
+     */
+    searchMaterials(query) {
+      if (!query || query.trim() === '') return this.materials
+      
+      const searchTerm = query.toLowerCase()
+      return this.materials.filter(m => 
+        m.title.toLowerCase().includes(searchTerm) ||
+        m.subject?.toLowerCase().includes(searchTerm) ||
+        m.tags?.some(tag => tag.toLowerCase().includes(searchTerm)) ||
+        m.content?.toLowerCase().includes(searchTerm)
+      )
+    },
+
+    /**
+     * Zurücksetzen des Error-Status
+     */
+    clearError() {
+      this.error = null
+    },
+
+    /**
+     * Prüft Backend-Verbindung
+     */
+    async checkBackendConnection() {
+      try {
+        return await materialsService.checkConnection()
+      } catch (error) {
+        console.error('Store.checkBackendConnection:', error)
+        return false
       }
     }
-  },
-
-  // Optional: Persistenz mit pinia-plugin-persistedstate
-  // persist: {
-  //   enabled: true,
-  //   strategies: [
-  //     {
-  //       key: 'clil-materials',
-  //       storage: localStorage
-  //     }
-  //   ]
-  // }
+  }
 }) 

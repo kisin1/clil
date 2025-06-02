@@ -101,11 +101,34 @@
     <!-- Main Content -->
     <v-main>
       <v-container fluid class="pa-4" style="background-color: var(--v-theme-background); min-height: calc(100vh - 64px);">
+        <!-- Loading State während des Routenwechsels -->
+        <v-progress-linear
+          v-if="isNavigating"
+          indeterminate
+          color="primary"
+          class="mb-4"
+        ></v-progress-linear>
+        
         <!-- Hier wird der Inhalt der jeweiligen Route angezeigt -->
-        <router-view v-slot="{ Component }">
-          <v-fade-transition mode="out-in">
-            <component :is="Component" />
-          </v-fade-transition>
+        <router-view v-slot="{ Component, route }">
+          <transition name="fade" mode="out-in">
+            <div :key="route.path" class="router-view-container">
+              <suspense>
+                <template #default>
+                  <component :is="Component" />
+                </template>
+                <template #fallback>
+                  <div class="d-flex justify-center align-center" style="min-height: 400px;">
+                    <v-progress-circular
+                      indeterminate
+                      color="primary"
+                      size="64"
+                    ></v-progress-circular>
+                  </div>
+                </template>
+              </suspense>
+            </div>
+          </transition>
         </router-view>
       </v-container>
     </v-main>
@@ -122,7 +145,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useTheme } from 'vuetify'
 
@@ -133,6 +156,18 @@ const theme = useTheme();
 const drawer = ref(true); // Navigation Drawer standardmäßig offen
 const search = ref('');
 const isDarkMode = ref(false);
+const isNavigating = ref(false);
+
+// Router Navigation Guards für Loading State
+router.beforeEach(() => {
+  isNavigating.value = true;
+});
+
+router.afterEach(() => {
+  setTimeout(() => {
+    isNavigating.value = false;
+  }, 100);
+});
 
 const navigationItems = [
   { title: 'Dashboard', to: '/', icon: 'mdi-view-dashboard-variant-outline', matchPrefix: false },
@@ -178,5 +213,17 @@ function logout() {
 /* Anpassung der Dichte für die App Bar Elemente */
 .v-app-bar .v-input {
   font-size: 0.9rem;
+}
+
+/* Fade Transition */
+.fade-enter-active, .fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from, .fade-leave-to {
+  opacity: 0;
+}
+
+.router-view-container {
+  width: 100%;
 }
 </style> 

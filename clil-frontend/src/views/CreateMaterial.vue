@@ -414,6 +414,7 @@
 
     <ExportDialog
       v-model="exportDialog"
+      :material-id="generatedMaterial?.id || ''"
       :material="generatedMaterial"
       :metadata="{
         type: form.type,
@@ -753,9 +754,16 @@ const generateMaterialAction = async () => {
   }
 
   try {
+    // Direkt die API verwenden, nicht die Store-Funktion
     const response = await deepinfraApi.generateMaterial(form.value.type, {
       topic: form.value.topic,
       prompt: generatedPrompt.value,
+      subject: form.value.subject,
+      languageLevel: form.value.languageLevel,
+      vocabPercentage: form.value.vocabPercentage,
+      contentFocus: form.value.contentFocus,
+      includeVocabList: form.value.includeVocabList,
+      description: form.value.description
     });
 
     if (response.success) {
@@ -821,33 +829,38 @@ const saveMaterial = async () => {
   saving.value = true;
   try {
     const newMaterialData = {
-      title:
-        generatedMaterial.value.title ||
-        `${form.value.subject}: ${form.value.topic}`,
-      type: form.value.type,
+      // Frontend-orientierte Felder, die der Service dann transformiert
+      title: generatedMaterial.value.title || form.value.topic,
+      type: form.value.type, // Wird zu materialType
       subject: form.value.subject,
-      content: generatedMaterial.value.content,
-      language: {
-        level: form.value.languageLevel,
-        vocabPercentage: form.value.vocabPercentage,
-      },
+      content: generatedMaterial.value.content, // Wird zu aiResponse & formattedHtml
+      languageLevel: form.value.languageLevel,
+      vocabPercentage: form.value.vocabPercentage,
       tags: [
         form.value.subject.toLowerCase(),
         form.value.topic.toLowerCase().split(" ")[0],
-      ],
-      prompt: generatedPrompt.value, // Prompt speichern
-      clilElements: {
+      ].filter(tag => tag && tag.trim() !== ''), // Filtert leere Tags
+      // Zusätzliche Metadaten für spätere Verwendung oder detailliertere Speicherung
+      prompt: generatedPrompt.value,
+      clilElements: { // Diese sind eher für die interne Logik oder detaillierte Ansichten
         vocabPercentage: form.value.vocabPercentage,
         contentFocus: form.value.contentFocus,
         includeVocabList: form.value.includeVocabList,
       },
     };
+
+    console.log('[CreateMaterial.vue] newMaterialData before sending to store:', JSON.stringify(newMaterialData, null, 2));
+
     const savedMaterial = await materialsStore.addMaterial(newMaterialData);
+    
+    console.log('[CreateMaterial.vue] Successfully saved material:', JSON.stringify(savedMaterial, null, 2));
+    
     uiStore.setLastCreatedMaterial(savedMaterial.id);
     previewDialog.value = false;
     showFeedback("Material erfolgreich gespeichert!", "success");
     router.push(`/edit/${savedMaterial.id}`);
   } catch (error) {
+    console.error('[CreateMaterial.vue] Error in saveMaterial:', error);
     handleError(error, "saveMaterial");
   } finally {
     saving.value = false;

@@ -3,37 +3,37 @@ import { de } from 'date-fns/locale';
 
 // Materialtypen-Konfiguration
 export const MATERIAL_TYPES = {
-  worksheet: {
+  Arbeitsblatt: {
     title: 'Arbeitsblatt',
     icon: 'mdi-file-document-outline',
     color: 'success',
     description: 'Übungsblatt mit Aufgaben & Lösungen'
   },
-  quiz: {
+  Quiz: {
     title: 'Quiz',
     icon: 'mdi-help-circle-outline',
     color: 'info',
     description: 'Multiple-Choice oder Lückentext'
   },
-  glossary: {
+  Glossar: {
     title: 'Glossar',
     icon: 'mdi-book-open-variant',
     color: 'warning',
     description: 'Fachwörterbuch mit Definitionen'
   },
-  presentation: {
+  Präsentation: {
     title: 'Präsentation',
     icon: 'mdi-presentation',
     color: 'purple',
     description: 'Folien für den Unterricht'
   },
-  graphic: {
+  Grafik: {
     title: 'Grafik',
     icon: 'mdi-chart-bar',
     color: 'red',
     description: 'Diagramme und Visualisierungen'
   },
-  video: {
+  'Video-Skript': {
     title: 'Video-Skript',
     icon: 'mdi-video',
     color: 'grey',
@@ -43,7 +43,17 @@ export const MATERIAL_TYPES = {
 
 // Hilfsfunktionen für Materialtypen
 export function getMaterialTypeConfig(type) {
-  return MATERIAL_TYPES[type] || {
+  const englishToGerman = {
+    'worksheet': 'Arbeitsblatt',
+    'quiz': 'Quiz',
+    'glossary': 'Glossar',
+    'presentation': 'Präsentation',
+    'graphic': 'Grafik',
+    'video': 'Video-Skript'
+  };
+
+  const normalizedType = englishToGerman[type] || type;
+  return MATERIAL_TYPES[normalizedType] || {
     title: type,
     icon: 'mdi-file-outline',
     color: 'grey',

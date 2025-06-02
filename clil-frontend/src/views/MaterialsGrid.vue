@@ -10,15 +10,15 @@
           <v-btn
             :color="viewMode === 'grid' ? 'primary' : undefined"
             @click="viewMode = 'grid'"
-            icon="mdi-view-grid-outline"
           >
+            <v-icon>mdi-view-grid-outline</v-icon>
             <v-tooltip activator="parent" location="top">Kachelansicht</v-tooltip>
           </v-btn>
           <v-btn
             :color="viewMode === 'list' ? 'primary' : undefined"
             @click="viewMode = 'list'"
-             icon="mdi-view-list-outline"
           >
+            <v-icon>mdi-view-list-outline</v-icon>
             <v-tooltip activator="parent" location="top">Listenansicht</v-tooltip>
           </v-btn>
         </v-btn-group>
@@ -51,6 +51,8 @@
             <v-select
               v-model="typeFilter"
               :items="typeOptions"
+              item-title="title"
+              item-value="value"
               label="Typ"
               prepend-inner-icon="mdi-filter-variant"
               variant="outlined"
@@ -65,6 +67,8 @@
             <v-select
               v-model="subjectFilter"
               :items="subjectOptions"
+              item-title="title"
+              item-value="value"
               label="Fach"
               prepend-inner-icon="mdi-book-open-variant"
               variant="outlined"
@@ -136,6 +140,8 @@
                   <v-select
                     v-model="languageLevelFilter"
                     :items="languageLevels"
+                    item-title="title"
+                    item-value="value"
                     label="Sprachniveau"
                     variant="outlined"
                     density="compact"
@@ -147,6 +153,8 @@
                   <v-select
                     v-model="dateFilter"
                     :items="dateFilters"
+                    item-title="title"
+                    item-value="value"
                     label="Zeitraum"
                     variant="outlined"
                     density="compact"
@@ -264,6 +272,7 @@
                       <v-list-item prepend-icon="mdi-pencil-outline" title="Bearbeiten" :to="`/edit/${material.id}`"></v-list-item>
                       <v-list-item prepend-icon="mdi-content-copy" title="Duplizieren" @click="duplicateMaterialAction(material)"></v-list-item>
                       <v-list-item prepend-icon="mdi-export-variant" title="Exportieren" @click="openExportDialogAction(material)"></v-list-item>
+                      <v-list-item prepend-icon="mdi-file-pdf-box" title="Als PDF" @click="exportToPDF(material)"></v-list-item>
                       <v-list-item prepend-icon="mdi-share-variant-outline" title="Teilen"></v-list-item>
                       <v-divider></v-divider>
                       <v-list-item :base-color="material.favorite ? 'warning' : 'default'" @click="toggleFavoriteAction(material.id)">
@@ -280,9 +289,6 @@
               </v-card-item>
 
               <v-card-text class="flex-grow-1 pt-2">
-                <v-chip size="small" color="primary" label variant="tonal" class="mr-1 mb-1">
-                  {{ getTypeName(material.type) }}
-                </v-chip>
                 <v-chip size="small" color="secondary" label variant="tonal" class="mr-1 mb-1">
                   {{ material.subject }}
                 </v-chip>
@@ -390,6 +396,7 @@
                       <v-list-item prepend-icon="mdi-pencil-outline" title="Bearbeiten" :to="`/edit/${material.id}`"></v-list-item>
                       <v-list-item prepend-icon="mdi-content-copy" title="Duplizieren" @click="duplicateMaterialAction(material)"></v-list-item>
                       <v-list-item prepend-icon="mdi-export-variant" title="Exportieren" @click="openExportDialogAction(material)"></v-list-item>
+                      <v-list-item prepend-icon="mdi-file-pdf-box" title="Als PDF" @click="exportToPDF(material)"></v-list-item>
                       <v-list-item prepend-icon="mdi-share-variant-outline" title="Teilen"></v-list-item>
                       <v-divider></v-divider>
                       <v-list-item :base-color="material.favorite ? 'warning' : 'default'" @click="toggleFavoriteAction(material.id)">
@@ -406,9 +413,6 @@
               </v-card-item>
 
               <v-card-text class="flex-grow-1 pt-2">
-                <v-chip size="small" color="primary" label variant="tonal" class="mr-1 mb-1">
-                  {{ getTypeName(material.type) }}
-                </v-chip>
                 <v-chip size="small" color="secondary" label variant="tonal" class="mr-1 mb-1">
                   {{ material.subject }}
                 </v-chip>
@@ -581,6 +585,7 @@
                <v-list density="compact">
                  <v-list-item prepend-icon="mdi-content-copy" title="Duplizieren" @click="duplicateMaterialAction(item)"></v-list-item>
                  <v-list-item prepend-icon="mdi-export-variant" title="Exportieren" @click="openExportDialogAction(item)"></v-list-item>
+                 <v-list-item prepend-icon="mdi-file-pdf-box" title="Als PDF" @click="exportToPDF(item)"></v-list-item>
                  <v-list-item prepend-icon="mdi-share-variant-outline" title="Teilen"></v-list-item>
                  <v-divider></v-divider>
                  <v-list-item prepend-icon="mdi-delete-outline" title="Löschen" base-color="error" @click="confirmDeleteAction(item)"></v-list-item>
@@ -669,7 +674,7 @@
     <!-- Export Dialog -->
     <export-dialog
         v-model="exportDialog"
-        :material-id="selectedMaterial?.id"
+        :material-id="selectedMaterial?.id?.toString()"
     />
     
     <!-- Batch Export Dialog -->
@@ -722,19 +727,17 @@
         </v-btn>
       </template>
     </v-snackbar>
-     <!-- Export Dialog -->
-     <export-dialog
-        v-model="exportDialog"
-        :material-id="selectedMaterial?.id"
-    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, reactive } from 'vue';
+import { ref, computed, onMounted, watch, reactive, onBeforeUnmount } from 'vue';
 import { useRouter } from 'vue-router';
 import { useMaterialsStore } from '@/stores/materials';
 import ExportDialog from '@/components/ExportDialog.vue';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
+import html2canvas from 'html2canvas';
 
 const router = useRouter();
 const materialsStore = useMaterialsStore();
@@ -804,13 +807,13 @@ const headers = [
 
 // Filter/Sort options
 const typeOptions = [
- { title: 'Alle Typen', value: null },
- { title: 'Arbeitsblatt', value: 'worksheet' },
- { title: 'Quiz', value: 'quiz' },
- { title: 'Glossar', value: 'glossary' },
- { title: 'Präsentation', value: 'presentation' },
- { title: 'Grafik', value: 'graphic' },
- { title: 'Video-Skript', value: 'video' },
+  { title: 'Alle Typen', value: null },
+  { title: 'Arbeitsblatt', value: 'Arbeitsblatt' },
+  { title: 'Quiz', value: 'Quiz' },
+  { title: 'glossary', value: 'glossary' },
+  { title: 'presentation', value: 'presentation' },
+  { title: 'graphic', value: 'graphic' },
+  { title: 'video', value: 'video' },
 ];
 
 const languageLevels = [
@@ -861,6 +864,15 @@ onMounted(async () => {
    showSnackbar('Fehler beim Laden der Materialien.', 'error');
  } finally {
    loading.value = false;
+ }
+});
+
+// Aktualisiere den Store, wenn wir die Ansicht verlassen
+onBeforeUnmount(async () => {
+ try {
+   await materialsStore.fetchMaterials();
+ } catch (error) {
+   console.error('Error refreshing materials before unmount:', error);
  }
 });
 
@@ -997,17 +1009,41 @@ const isFiltered = computed(() => {
 });
 
 // --- Helper Functions ---
-const getTypeName = (type) => typeOptions.find(o => o.value === type)?.title || type;
+const getTypeName = (type) => type || '';
+
 const getIconForType = (type) => {
-   const map = { worksheet: 'mdi-file-document-outline', quiz: 'mdi-comment-question-outline', glossary: 'mdi-book-open-variant', presentation: 'mdi-presentation', graphic: 'mdi-chart-bar', video: 'mdi-video' };
-   return map[type] || 'mdi-file-question-outline';
+  const map = {
+    'worksheet': 'mdi-file-document-outline',
+    'quiz': 'mdi-help-circle-outline',
+    'glossary': 'mdi-book-open-variant',
+    'presentation': 'mdi-presentation',
+    'graphic': 'mdi-chart-bar',
+    'video': 'mdi-video',
+  };
+  return map[type?.toLowerCase()] || 'mdi-file-outline';
 };
+
 const getColorForType = (type) => {
-   const map = { worksheet: 'green', quiz: 'blue', glossary: 'orange', presentation: 'purple', graphic: 'red', video: 'grey' };
-   return map[type] || 'grey';
+  const map = {
+    'worksheet': 'success',
+    'quiz': 'info',
+    'glossary': 'warning',
+    'presentation': 'purple',
+    'graphic': 'red',
+    'video': 'grey'
+  };
+  return map[type] || 'grey';
 };
+
 const formatDate = (dateString) => dateString ? new Date(dateString).toLocaleDateString('de-DE') : '-';
 const truncateText = (text, len) => (text && text.length > len) ? text.slice(0, len) + '…' : text;
+
+// Hilfsfunktion zum Entfernen von HTML-Tags
+const stripHtml = (html) => {
+  const tmp = document.createElement('DIV');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+};
 
 // --- Batch Operations ---
 const exportSelected = () => {
@@ -1186,6 +1222,117 @@ const deleteMaterialAction = async () => {
 watch([search, typeFilter, subjectFilter, favoritesOnly, tagFilters, languageLevelFilter, dateFilter], () => { 
  page.value = 1; 
 });
+
+const exportToPDF = async (material) => {
+  // Erstelle temporäres div für die Vorschau
+  const previewDiv = document.createElement('div');
+  previewDiv.style.position = 'absolute';
+  previewDiv.style.left = '-9999px';
+  previewDiv.style.top = '-9999px';
+  previewDiv.style.width = '595px'; // A4 Breite in Pixeln bei 72 DPI
+  previewDiv.style.padding = '40px';
+  previewDiv.style.backgroundColor = 'white';
+  
+  // Bestimme den Inhalt - verwende verschiedene mögliche Felder
+  const content = material.content || material.preview || material.aiResponse || '';
+  const hasContent = content && content.trim() !== '';
+  
+  previewDiv.innerHTML = `
+    <div style="font-family: Arial, sans-serif; font-size: 12px;">
+      <h1 style="font-size: 18px; margin-bottom: 15px; color: #333;">${material.title || 'Unbenanntes Material'}</h1>
+      
+      <div style="margin-bottom: 15px; color: #666;">
+        <p style="margin: 5px 0;"><strong>Typ:</strong> ${getTypeName(material.type)}</p>
+        <p style="margin: 5px 0;"><strong>Fach:</strong> ${material.subject || 'Nicht angegeben'}</p>
+        ${material.language?.level ? `<p style="margin: 5px 0;"><strong>Sprachniveau:</strong> ${material.language.level}</p>` : ''}
+      </div>
+      
+      ${material.tags?.length ? `
+        <div style="margin-bottom: 15px;">
+          <p style="margin: 5px 0; color: #666;"><strong>Tags:</strong></p>
+          <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+            ${material.tags.map(tag => `
+              <span style="background: #f5f5f5; padding: 2px 6px; border-radius: 3px; font-size: 11px;">${tag}</span>
+            `).join('')}
+          </div>
+        </div>
+      ` : ''}
+      
+      ${hasContent ? `
+        <div style="margin-top: 20px;">
+          <h2 style="font-size: 14px; margin-bottom: 10px; color: #333;">Inhalt</h2>
+          <div style="line-height: 1.5; color: #333;">${content}</div>
+        </div>
+      ` : `
+        <div style="margin-top: 20px; color: #999; text-align: center; padding: 20px;">
+          <p>Kein Inhalt verfügbar</p>
+          <p style="font-size: 10px;">Material-ID: ${material.id}</p>
+        </div>
+      `}
+    </div>
+  `;
+  
+  document.body.appendChild(previewDiv);
+  
+  try {
+    // Konvertiere das div zu einem Canvas
+    const canvas = await html2canvas(previewDiv, {
+      scale: 2, // Höhere Qualität
+      useCORS: true,
+      logging: false,
+      backgroundColor: '#ffffff',
+      width: 595, // A4 Breite
+      height: 842 // A4 Höhe
+    });
+    
+    // Erstelle PDF
+    const imgData = canvas.toDataURL('image/png');
+    const pdf = new jsPDF({
+      orientation: 'portrait',
+      unit: 'pt',
+      format: 'a4'
+    });
+    
+    // Berechne das Seitenverhältnis
+    const imgWidth = pdf.internal.pageSize.getWidth();
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    
+    // Füge das Bild hinzu
+    pdf.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+    
+    // PDF im neuen Tab öffnen
+    const pdfData = pdf.output('datauristring');
+    const printWindow = window.open('', '_blank');
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${material.title || 'Material'} - PDF Ansicht</title>
+          <style>
+            body, html {
+              margin: 0;
+              padding: 0;
+              height: 100%;
+              overflow: hidden;
+            }
+            iframe {
+              width: 100%;
+              height: 100%;
+              border: none;
+            }
+          </style>
+        </head>
+        <body>
+          <iframe src="${pdfData}"></iframe>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  } finally {
+    // Entferne das temporäre div
+    document.body.removeChild(previewDiv);
+  }
+};
 </script>
 
 <style scoped>

@@ -246,19 +246,6 @@
          </div>
       </v-card-text>
     </v-card>
-
-    <!-- Status Bar -->
-    <div class="d-flex align-center justify-space-between mt-2 text-caption text-medium-emphasis">
-      <div>
-        <v-chip size="small" :color="saveStatusColor" variant="text">
-          <v-icon start size="small">
-            {{ saveStatusIcon }}
-          </v-icon>
-          {{ saveStatusText }}
-        </v-chip>
-      </div>
-      <div v-if="editor">{{ editor.storage.characterCount.words() }} Wörter</div>
-    </div>
   </div>
 </template>
 
@@ -290,9 +277,6 @@ const emit = defineEmits(['update:modelValue', 'save-status']);
 
 // Editor state
 const editorFocused = ref(false);
-const saveStatus = ref('saved'); // 'saved', 'unsaved', 'saving', 'error'
-const saveTimeout = ref(null);
-const autosaveDelay = 2000; // ms
 
 // Dialog state
 const linkDialog = ref(false);
@@ -341,25 +325,6 @@ const editor = useEditor({
   onUpdate: ({ editor }) => {
     // Emit update event for v-model
     emit('update:modelValue', editor.getHTML());
-
-    // Handle autosave
-    saveStatus.value = 'unsaved';
-    emit('save-status', 'unsaved');
-    if (saveTimeout.value) clearTimeout(saveTimeout.value);
-    saveTimeout.value = setTimeout(() => {
-      // Simulate save action (in real app, call store action)
-      saveStatus.value = 'saving';
-      emit('save-status', 'saving');
-      console.log("Autosaving content...");
-      // Simulate API call
-      setTimeout(() => {
-          // Assume save was successful
-          saveStatus.value = 'saved';
-          emit('save-status', 'saved');
-          console.log("Autosave complete.");
-          // Handle potential save errors here
-      }, 800); 
-    }, autosaveDelay);
   },
 });
 
@@ -367,14 +332,11 @@ const editor = useEditor({
 watch(() => props.modelValue, (newValue) => {
   if (editor.value && editor.value.getHTML() !== newValue) {
     editor.value.commands.setContent(newValue, false); // false to avoid triggering update event
-    saveStatus.value = 'saved'; // Assume external changes are saved
-    emit('save-status', 'saved');
   }
 });
 
 // Cleanup editor on unmount
 onBeforeUnmount(() => {
-  if (saveTimeout.value) clearTimeout(saveTimeout.value);
   editor.value?.destroy();
 });
 
@@ -390,35 +352,6 @@ const currentHeading = computed(() => {
     if (editor.value.isActive('heading', { level: 2 })) return 'Überschrift 2';
     if (editor.value.isActive('heading', { level: 3 })) return 'Überschrift 3';
     return 'Text';
-});
-
-// Computed properties for save status display
-const saveStatusText = computed(() => {
-    switch(saveStatus.value) {
-        case 'saved': return 'Gespeichert';
-        case 'unsaved': return 'Änderungen nicht gespeichert';
-        case 'saving': return 'Wird gespeichert...';
-        case 'error': return 'Fehler beim Speichern';
-        default: return ''
-    }
-});
-const saveStatusIcon = computed(() => {
-     switch(saveStatus.value) {
-        case 'saved': return 'mdi-check-circle-outline';
-        case 'unsaved': return 'mdi-alert-circle-outline';
-        case 'saving': return 'mdi-sync';
-        case 'error': return 'mdi-close-circle-outline';
-        default: return ''
-    }
-});
-const saveStatusColor = computed(() => {
-     switch(saveStatus.value) {
-        case 'saved': return 'success';
-        case 'unsaved': return 'warning';
-        case 'saving': return 'info';
-        case 'error': return 'error';
-        default: return 'grey'
-    }
 });
 
 // Link handling

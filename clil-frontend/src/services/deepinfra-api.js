@@ -59,6 +59,19 @@ apiClient.interceptors.response.use(
   }
 );
 
+const typeMap = {
+  'worksheet': 'Arbeitsblatt',
+  'quiz': 'Quiz',
+  'glossary': 'Glossar',
+  'presentation': 'Präsentation',
+  'graphic': 'Grafik',
+  'video': 'Video-Skript'
+};
+
+const reverseTypeMap = Object.fromEntries(
+  Object.entries(typeMap).map(([key, value]) => [value, key])
+);
+
 export default {
   // Main method to generate lesson materials
   async generateMaterial(materialType, params = {}) {
@@ -69,10 +82,18 @@ export default {
 
       // Request payload matching the Spring Boot MaterialRequest DTO
       const requestPayload = {
-        materialType: materialType,
+        materialType: typeMap[materialType] || materialType,
         topic: params.topic,
         prompt: params.prompt,
+        subject: params.subject || '',
+        languageLevel: params.languageLevel || 'B1',
+        vocabPercentage: params.vocabPercentage || 30,
+        contentFocus: params.contentFocus || 'balanced',
+        includeVocabList: params.includeVocabList || true,
+        description: params.description || ''
       };
+
+      console.log('Sending request payload:', JSON.stringify(requestPayload, null, 2));
 
       // Call Spring Boot endpoint
       const response = await apiClient.post("/generate", requestPayload);
@@ -81,7 +102,7 @@ export default {
       return {
         success: true,
         data: {
-          title: `${materialType}: ${params.topic}`,
+          title: params.topic,
           content:
             response.data.formattedResponse || "<p>No content generated</p>",
         },
@@ -115,10 +136,16 @@ export default {
         success: true,
         data: response.data.map((material) => ({
           id: material.id,
-          type: material.materialType,
+          type: reverseTypeMap[material.materialType] || material.materialType?.toLowerCase() || '',
+          title: material.topic,
           topic: material.topic,
-          preview: material.preview,
-          createdAt: new Date(material.createdAt).toLocaleDateString(),
+          subject: material.subject || '',
+          preview: material.aiResponse,
+          content: material.aiResponse,
+          createdAt: material.createdAt,
+          created: material.createdAt,
+          modified: material.modifiedAt || material.createdAt,
+          tags: material.tags || []
         })),
       };
     } catch (error) {
@@ -132,22 +159,77 @@ export default {
 
   // Get specific material by ID
   async getMaterial(id) {
+    console.log('API Request: GET /materials/' + id);
     try {
       const response = await apiClient.get(`/materials/${id}`);
+      console.log('API Response:', response.status, response.data);
+      console.log('Raw API response:', response.data);
+      
+      // Transformiere die API-Antwort in das erwartete Format
+      return {
+        id: response.data.id,
+        title: response.data.topic,
+        content: response.data.formattedHtml || response.data.content,
+        type: response.data.materialType,
+        subject: response.data.subject || '',
+        languageLevel: response.data.languageLevel || 'B1',
+        vocabPercentage: response.data.vocabPercentage || 30,
+        created: response.data.createdAt,
+        modified: response.data.modifiedAt,
+        tags: response.data.tags || []
+      };
+    } catch (error) {
+      console.error('Error in getMaterial:', error);
+      throw error;
+    }
+  },
+
+  // Create new material
+  async createMaterial(materialData) {
+    try {
+      console.log('[deepinfra-api] createMaterial sending to backend:', JSON.stringify(materialData, null, 2));
+      const response = await apiClient.post("/materials", materialData);
+      // Die Backend-Antwort sollte bereits das transformierte Material im `data`-Feld haben
+      return {
+        success: true,
+        data: response.data, // Das Backend gibt direkt das LessonMaterialDto zurück
+      };
+    } catch (error) {
+      console.error('[deepinfra-api] Error in createMaterial:', error);
+      console.error('[deepinfra-api] Error details:', error.response?.data || error.message);
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Fehler beim Erstellen des Materials in API',
+        data: error.response?.data // Für detailliertere Fehlermeldungen vom Backend
+      };
+    }
+  },
+
+  // Update existing material
+  async updateMaterial(id, materialData) {
+    try {
+      console.log('Updating material with data:', materialData);
+      const response = await apiClient.put(`/materials/${id}`, materialData);
+      console.log('Update response:', response.data);
       return {
         success: true,
         data: {
-          title: `${response.data.materialType}: ${response.data.topic}`,
+          id: response.data.id,
+          title: response.data.topic,
           content: response.data.aiResponse,
-          metadata: {
-            id: response.data.id,
-            type: response.data.materialType,
-            topic: response.data.topic,
-            createdAt: response.data.createdAt,
+          type: response.data.materialType,
+          subject: response.data.subject || '',
+          language: {
+            level: response.data.languageLevel || 'B1',
+            vocabPercentage: response.data.vocabPercentage || 30
           },
+          created: response.data.createdAt,
+          modified: response.data.modifiedAt || response.data.createdAt,
+          tags: response.data.tags || []
         },
       };
     } catch (error) {
+      console.error('Error updating material:', error);
       return {
         success: false,
         error: error.message,
@@ -159,7 +241,9 @@ export default {
   async deleteMaterial(id) {
     try {
       await apiClient.delete(`/materials/${id}`);
-      return { success: true };
+      return {
+        success: true,
+      };
     } catch (error) {
       return {
         success: false,

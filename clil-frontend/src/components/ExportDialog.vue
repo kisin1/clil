@@ -243,14 +243,29 @@ import { useMaterialsStore } from '@/stores/materials';
 
 const props = defineProps({
   modelValue: Boolean, // Controls dialog visibility
-  materialId: String
+  materialId: {
+    type: [String, Number],
+    required: false,
+    default: ''
+  },
+  material: {
+    type: Object,
+    required: false,
+    default: null
+  }
 });
 
 const emit = defineEmits(['update:modelValue']);
 
 // --- Store & Data --- 
 const materialsStore = useMaterialsStore();
-const material = computed(() => materialsStore.getMaterialById(props.materialId));
+const materialData = computed(() => {
+  if (props.material) return props.material;
+  if (!props.materialId) return null;
+  
+  const id = typeof props.materialId === 'string' ? parseInt(props.materialId) : props.materialId;
+  return materialsStore.getMaterialById(id);
+});
 
 // --- Dialog State --- 
 const dialog = computed({
@@ -300,7 +315,7 @@ const availableLayouts = computed(() => {
 
 // Final filename including extension
 const finalFilename = computed({
-    get: () => filenameBase.value || material.value?.title || 'export',
+    get: () => filenameBase.value || materialData.value?.title || 'export',
     set: (v) => { filenameBase.value = v; }
 });
 
@@ -348,7 +363,7 @@ const debouncedGeneratePreview = () => {
 
 // Generate preview (mock)
 const generatePreview = async () => {
-  if (!material.value) return;
+  if (!materialData.value) return;
   previewLoading.value = true;
   previewError.value = false;
   previewContent.value = '';
@@ -362,11 +377,11 @@ const generatePreview = async () => {
     // This mock uses the selected options to slightly vary the output
     previewContent.value = `
       <div class="preview-page-inner">
-        ${includeHeader.value ? `<div class="preview-header">${headerFooterText.value || material.value.title} - Layout: ${layoutOption.value}</div>` : ''}
-        <div class="preview-title">${material.value.title} (${formatOption.value.toUpperCase()})</div>
-        <div class="preview-subtitle">${material.value.subject} - Color: ${colorScheme.value} / Font: ${fontFamily.value}</div>
+        ${includeHeader.value ? `<div class="preview-header">${headerFooterText.value || materialData.value.title} - Layout: ${layoutOption.value}</div>` : ''}
+        <div class="preview-title">${materialData.value.title} (${formatOption.value.toUpperCase()})</div>
+        <div class="preview-subtitle">${materialData.value.subject} - Color: ${colorScheme.value} / Font: ${fontFamily.value}</div>
         <div class="preview-content">
-          ${material.value.content || '<p>Kein Inhalt verfügbar.</p>'}
+          ${materialData.value.content || '<p>Kein Inhalt verfügbar.</p>'}
           <p><em>Vorschau generiert am ${new Date().toLocaleString('de-DE')}</em></p>
         </div>
         ${includeFooter.value ? `<div class="preview-footer">${headerFooterText.value || 'Seite 1'}</div>` : ''}
@@ -380,18 +395,401 @@ const generatePreview = async () => {
   }
 };
 
-// Export material (mock)
+// Export material
 const exportMaterialAction = async () => {
-  if (!material.value) return;
+  if (!materialData.value) return;
   exporting.value = true;
   console.log("Exporting with options:", { format: formatOption.value, layout: layoutOption.value, filename: finalFilename.value });
 
   try {
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500 + Math.random() * 1000));
+    // Erstelle den HTML-Inhalt für den Export mit verbessertem Layout
+    const exportContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <meta charset="UTF-8">
+          <title>${materialData.value.title}</title>
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            
+            body { 
+              font-family: ${fontFamily.value === 'open-sans' ? 'Open Sans, Arial' : fontFamily.value}, sans-serif;
+              line-height: 1.6;
+              color: #333;
+              max-width: 210mm;
+              margin: 0 auto;
+              padding: 20mm;
+              background: white;
+            }
+            
+            .document-container {
+              width: 100%;
+              max-width: 170mm; /* A4 width minus margins */
+              margin: 0 auto;
+            }
+            
+            .header { 
+              text-align: center; 
+              margin-bottom: 2em; 
+              padding-bottom: 1em;
+              border-bottom: 2px solid #ddd;
+            }
+            
+            .title { 
+              font-size: 28px; 
+              font-weight: bold; 
+              margin-bottom: 0.5em;
+              color: ${colorScheme.value === 'default' ? '#1976d2' : colorScheme.value === 'neutral' ? '#424242' : '#000'};
+              text-align: center;
+            }
+            
+            .subtitle { 
+              font-size: 16px; 
+              color: #666; 
+              margin-bottom: 2em;
+              text-align: center;
+              font-style: italic;
+            }
+            
+            .content { 
+              margin-top: 2em;
+              text-align: justify;
+              hyphens: auto;
+            }
+            
+            .content h1, .content h2, .content h3 {
+              margin-top: 1.5em;
+              margin-bottom: 0.8em;
+              color: ${colorScheme.value === 'default' ? '#1976d2' : colorScheme.value === 'neutral' ? '#424242' : '#000'};
+            }
+            
+            .content h1 { font-size: 22px; }
+            .content h2 { font-size: 18px; }
+            .content h3 { font-size: 16px; }
+            
+            .content p {
+              margin-bottom: 1em;
+              text-indent: 0;
+            }
+            
+            .content ul, .content ol {
+              margin-left: 2em;
+              margin-bottom: 1em;
+            }
+            
+            .content li {
+              margin-bottom: 0.3em;
+            }
+            
+            .content blockquote {
+              margin: 1em 2em;
+              padding: 1em;
+              background: #f5f5f5;
+              border-left: 4px solid ${colorScheme.value === 'default' ? '#1976d2' : '#ccc'};
+              font-style: italic;
+            }
+            
+            .content table {
+              width: 100%;
+              border-collapse: collapse;
+              margin: 1em 0;
+            }
+            
+            .content th, .content td {
+              border: 1px solid #ddd;
+              padding: 8px;
+              text-align: left;
+            }
+            
+            .content th {
+              background-color: #f5f5f5;
+              font-weight: bold;
+            }
+            
+            .footer { 
+              text-align: center; 
+              margin-top: 3em; 
+              padding-top: 1em;
+              border-top: 1px solid #ddd;
+              font-size: 12px; 
+              color: #666; 
+            }
+            
+            .metadata {
+              background: #f8f9fa;
+              padding: 1em;
+              border-radius: 4px;
+              margin: 1em 0;
+              font-size: 14px;
+            }
+            
+            @media print {
+              body { 
+                margin: 0;
+                padding: 15mm 20mm;
+              }
+              .document-container {
+                max-width: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="document-container">
+            ${includeHeader.value ? `<div class="header">${headerFooterText.value || materialData.value.title}</div>` : ''}
+            
+            
+            
+            <div class="content">${materialData.value.content || materialData.value.formattedHtml || '<p>Kein Inhalt verfügbar.</p>'}</div>
+            
+            ${includeFooter.value ? `<div class="footer">${headerFooterText.value || `Erstellt am ${new Date().toLocaleDateString('de-DE')}`}</div>` : ''}
+          </div>
+        </body>
+      </html>
+    `;
 
-    // Simulate file download (replace with actual download logic)
-    const blob = new Blob([`Exported content for ${material.value.title}`], { type: 'text/plain' });
+    let blob;
+    let mimeType;
+
+    switch (formatOption.value) {
+      case 'pdf':
+        // Für PDF verwenden wir jsPDF mit echtem Text (nicht Bild)
+        const { jsPDF } = await import('jspdf');
+        
+        // Hilfsfunktion zum Bereinigen von HTML zu Text
+        const htmlToText = (html) => {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = html;
+          
+          // Extrahiere strukturierten Text
+          const extractText = (element, level = 0) => {
+            let result = [];
+            
+            for (let child of element.childNodes) {
+              if (child.nodeType === Node.TEXT_NODE) {
+                const text = child.textContent.trim();
+                if (text) {
+                  result.push({ type: 'text', content: text, level });
+                }
+              } else if (child.nodeType === Node.ELEMENT_NODE) {
+                const tagName = child.tagName.toLowerCase();
+                
+                switch (tagName) {
+                  case 'h1':
+                    result.push({ type: 'heading1', content: child.textContent.trim(), level });
+                    break;
+                  case 'h2':
+                    result.push({ type: 'heading2', content: child.textContent.trim(), level });
+                    break;
+                  case 'h3':
+                    result.push({ type: 'heading3', content: child.textContent.trim(), level });
+                    break;
+                  case 'p':
+                    const pText = child.textContent.trim();
+                    if (pText) {
+                      result.push({ type: 'paragraph', content: pText, level });
+                    }
+                    break;
+                  case 'li':
+                    result.push({ type: 'listitem', content: child.textContent.trim(), level });
+                    break;
+                  case 'strong':
+                  case 'b':
+                    result.push({ type: 'bold', content: child.textContent.trim(), level });
+                    break;
+                  case 'em':
+                  case 'i':
+                    result.push({ type: 'italic', content: child.textContent.trim(), level });
+                    break;
+                  case 'br':
+                    result.push({ type: 'linebreak', content: '', level });
+                    break;
+                  default:
+                    result.push(...extractText(child, level));
+                    break;
+                }
+              }
+            }
+            return result;
+          };
+          
+          return extractText(tempDiv);
+        };
+        
+        // Erstelle PDF
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const pageWidth = 210;
+        const pageHeight = 297;
+        const margin = 20;
+        const contentWidth = pageWidth - (2 * margin);
+        
+        let currentY = margin;
+        
+        // PDF-Schriftarten und -größen
+        pdf.setFont('helvetica');
+        
+        // Hilfsfunktion für Seitenumbruch
+        const checkPageBreak = (neededHeight) => {
+          if (currentY + neededHeight > pageHeight - margin) {
+            pdf.addPage();
+            currentY = margin;
+          }
+        };
+        
+        // Hilfsfunktion für Textumbruch
+        const addTextWithWrap = (text, fontSize, fontStyle = 'normal', color = [0, 0, 0]) => {
+          pdf.setFontSize(fontSize);
+          pdf.setFont('helvetica', fontStyle);
+          pdf.setTextColor(color[0], color[1], color[2]);
+          
+          const lines = pdf.splitTextToSize(text, contentWidth);
+          const lineHeight = fontSize * 0.4;
+          
+          checkPageBreak(lines.length * lineHeight + 5);
+          
+          for (let line of lines) {
+            pdf.text(line, margin, currentY);
+            currentY += lineHeight;
+          }
+          currentY += 5; // Extra Abstand nach Text
+        };
+        
+        // Header hinzufügen
+        if (includeHeader.value) {
+          addTextWithWrap(headerFooterText.value || materialData.value.title, 14, 'bold', [100, 100, 100]);
+          currentY += 10;
+        }
+        
+        // Titel hinzufügen
+        addTextWithWrap(materialData.value.title || 'Untitled', 20, 'bold', [25, 118, 210]);
+        
+        // Inhalt verarbeiten
+        const contentText = materialData.value.content || materialData.value.formattedHtml || '<p>Kein Inhalt verfügbar.</p>';
+        const textElements = htmlToText(contentText);
+        
+        for (let element of textElements) {
+          switch (element.type) {
+            case 'heading1':
+              currentY += 5;
+              addTextWithWrap(element.content, 16, 'bold', [25, 118, 210]);
+              break;
+            case 'heading2':
+              currentY += 3;
+              addTextWithWrap(element.content, 14, 'bold', [25, 118, 210]);
+              break;
+            case 'heading3':
+              currentY += 2;
+              addTextWithWrap(element.content, 12, 'bold', [25, 118, 210]);
+              break;
+            case 'paragraph':
+              addTextWithWrap(element.content, 11, 'normal');
+              break;
+            case 'listitem':
+              addTextWithWrap('• ' + element.content, 11, 'normal');
+              break;
+            case 'bold':
+              addTextWithWrap(element.content, 11, 'bold');
+              break;
+            case 'italic':
+              addTextWithWrap(element.content, 11, 'italic');
+              break;
+            case 'linebreak':
+              currentY += 5;
+              break;
+            case 'text':
+              if (element.content.length > 0) {
+                addTextWithWrap(element.content, 11, 'normal');
+              }
+              break;
+          }
+        }
+        
+        // Footer hinzufügen
+        if (includeFooter.value) {
+          currentY += 20;
+          checkPageBreak(15);
+          addTextWithWrap(headerFooterText.value || `Erstellt am ${new Date().toLocaleDateString('de-DE')}`, 10, 'normal', [100, 100, 100]);
+        }
+        
+        blob = pdf.output('blob');
+        mimeType = 'application/pdf';
+        break;
+
+      case 'docx':
+        // Erstelle kompatibles RTF-Dokument für Word
+        
+        // Hilfsfunktion für saubere HTML zu RTF Konvertierung
+        const cleanTextForRtf = (html) => {
+          return html
+            .replace(/<h1[^>]*>(.*?)<\/h1>/gi, '\n\n\\b\\fs32 $1\\b0\\fs24\n\n')
+            .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '\n\n\\b\\fs28 $1\\b0\\fs24\n\n')
+            .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '\n\n\\b\\fs26 $1\\b0\\fs24\n\n')
+            .replace(/<p[^>]*>(.*?)<\/p>/gi, '\n$1\n')
+            .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '\\b $1\\b0')
+            .replace(/<b[^>]*>(.*?)<\/b>/gi, '\\b $1\\b0')
+            .replace(/<em[^>]*>(.*?)<\/em>/gi, '\\i $1\\i0')
+            .replace(/<i[^>]*>(.*?)<\/i>/gi, '\\i $1\\i0')
+            .replace(/<ul[^>]*>/gi, '\n')
+            .replace(/<\/ul>/gi, '\n')
+            .replace(/<ol[^>]*>/gi, '\n')
+            .replace(/<\/ol>/gi, '\n')
+            .replace(/<li[^>]*>(.*?)<\/li>/gi, '\n\\bullet $1\n')
+            .replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gi, '\n\\i "$1"\\i0\n')
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<[^>]+>/g, '') // Entferne alle anderen HTML-Tags
+            .replace(/&nbsp;/g, ' ')
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/&quot;/g, '"')
+            .replace(/&#39;/g, "'")
+            .replace(/[{}\\]/g, '') // Entferne RTF-kritische Zeichen
+            .replace(/\n\s*\n/g, '\n\\par\n') // Konvertiere doppelte Zeilenumbrüche
+            .replace(/\n/g, '\\line ') // Konvertiere einzelne Zeilenumbrüche
+            .trim();
+        };
+
+        // Einfache, kompatible RTF-Struktur
+        const rtfContent = `{\\rtf1\\ansi\\deff0 {\\fonttbl {\\f0 Times New Roman;} {\\f1 Arial;}}
+{\\colortbl;\\red0\\green0\\blue0;\\red25\\green118\\blue210;\\red102\\green102\\blue102;}
+
+\\f1\\fs24
+
+${includeHeader.value ? `\\qc\\b\\fs28 ${(headerFooterText.value || materialData.value.title || '').replace(/[{}\\]/g, '')}\\b0\\fs24\\par\\par` : ''}
+
+\\qc\\b\\fs36\\cf2 ${(materialData.value.title || 'Untitled').replace(/[{}\\]/g, '')}\\b0\\fs24\\par
+
+\\qc\\i\\fs22\\cf3 ${(materialData.value.subject || 'Kein Fach').replace(/[{}\\]/g, '')} - ${(materialData.value.type || 'Material').replace(/[{}\\]/g, '')}\\i0\\fs24\\par\\par
+
+${materialData.value.languageLevel || materialData.value.vocabPercentage ? `
+\\ql\\b Metadaten:\\b0\\par
+${materialData.value.languageLevel ? `Sprachniveau: ${materialData.value.languageLevel}\\par` : ''}
+${materialData.value.vocabPercentage ? `Fachvokabular: ${materialData.value.vocabPercentage}%\\par` : ''}
+\\par
+` : ''}
+
+\\ql ${cleanTextForRtf(materialData.value.content || materialData.value.formattedHtml || 'Kein Inhalt verfügbar.')}
+
+${includeFooter.value ? `\\par\\par\\qc\\fs18\\cf3 ${(headerFooterText.value || `Erstellt am ${new Date().toLocaleDateString('de-DE')}`).replace(/[{}\\]/g, '')}\\fs24\\par` : ''}
+
+\\par\\qc\\fs16\\cf3 Erstellt mit CLIL Material Management System\\fs24
+}`;
+        
+        blob = new Blob([rtfContent], { type: 'application/rtf' });
+        mimeType = 'application/rtf';
+        break;
+
+      case 'html':
+        blob = new Blob([exportContent], { type: 'text/html' });
+        mimeType = 'text/html';
+        break;
+    }
+
+    // Erstelle Download-Link
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
     link.download = `${finalFilename.value}.${formatOption.value}`;
@@ -399,12 +797,9 @@ const exportMaterialAction = async () => {
     URL.revokeObjectURL(link.href);
 
     showSnackbar('Export erfolgreich! Download gestartet.', 'success');
-    // Optionally close dialog after success
-    // setTimeout(closeDialog, 1500);
-
   } catch (error) {
     console.error('Error exporting material:', error);
-    showSnackbar('Fehler beim Exportieren.', 'error');
+    showSnackbar('Fehler beim Exportieren: ' + error.message, 'error');
   } finally {
     exporting.value = false;
   }
@@ -423,14 +818,14 @@ watch(
 watch(
     () => props.modelValue,
     (newValue) => {
-        if (newValue && material.value) {
+        if (newValue && materialData.value) {
             // Reset options to defaults or load saved preferences if needed
-            filenameBase.value = material.value.title || 'export';
-            headerFooterText.value = material.value.title || '';
+            filenameBase.value = materialData.value.title || 'export';
+            headerFooterText.value = materialData.value.title || '';
             nextTick(() => {
                  debouncedGeneratePreview();
             });
-        } else if (newValue && !material.value) {
+        } else if (newValue && !materialData.value) {
              console.error("ExportDialog opened but material not found for ID:", props.materialId);
         }
     }

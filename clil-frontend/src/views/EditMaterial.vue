@@ -57,8 +57,6 @@
                 variant="outlined"
                 density="compact"
                 class="mb-3"
-                @input="markUnsaved"
-                @blur="saveTitle"
               ></v-text-field>
               <v-select
                 v-model="editableType"
@@ -69,7 +67,6 @@
                 variant="outlined"
                 density="compact"
                 class="mb-3"
-                @update:modelValue="saveMetadata('type', editableType)"
               ></v-select>
                <v-select
                 v-model="editableSubject"
@@ -78,7 +75,6 @@
                 variant="outlined"
                 density="compact"
                 class="mb-3"
-                @update:modelValue="saveMetadata('subject', editableSubject)"
               ></v-select>
 
                <v-divider class="my-3"></v-divider>
@@ -90,7 +86,6 @@
                   variant="outlined"
                   density="compact"
                   class="mb-3"
-                   @update:modelValue="saveMetadata('language.level', editableLanguageLevel)"
                 ></v-select>
                 <v-slider
                     v-model="editableVocabPercentage"
@@ -101,7 +96,6 @@
                     color="primary"
                     thumb-label
                     class="mb-1"
-                    @update:modelValue="saveMetadata('language.vocabPercentage', editableVocabPercentage)"
                 >
                     <template v-slot:append>
                         <v-chip size="small" label>{{ editableVocabPercentage }}%</v-chip>
@@ -151,13 +145,8 @@
 
     <ExportDialog
       v-model="exportDialog"
+      :material-id="material?.id"
       :material="material"
-      :metadata="{
-        type: editableType,
-        subject: editableSubject,
-        languageLevel: editableLanguageLevel,
-        vocabPercentage: editableVocabPercentage
-      }"
     />
     <v-snackbar
       v-model="snackbar.show"
@@ -188,7 +177,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useMaterialsStore } from '@/stores/materials';
 import { useUIStore } from '@/stores/ui';
@@ -220,8 +209,6 @@ const availableTags = ref(['CLIL', 'Technik', 'Quiz', 'Glossar', 'Präsentation'
 const saveStatus = ref('saved');
 const confirmDeleteDialog = ref(false);
 const deleting = ref(false);
-const titleSaveTimeout = ref(null);
-const contentSaveTimeout = ref(null);
 const exportDialog = ref(false);
 const showPreview = ref(false);
 const showVersionHistory = ref(false);
@@ -238,24 +225,77 @@ const languageLevels = [
   { title: 'A1', value: 'A1' }, { title: 'A2', value: 'A2' }, { title: 'B1', value: 'B1' }, { title: 'B2', value: 'B2' }, { title: 'C1', value: 'C1' }
 ];
 
-// Material laden
-onMounted(async () => {
-  loading.value = true;
-  const materialId = route.params.id;
-  material.value = materialsStore.getMaterialById(materialId);
-  if (!material.value) {
-    console.warn(`Material with ID ${materialId} not found in store.`);
+// Watch für Route-Änderungen
+watch(() => route.params.id, async (newId, oldId) => {
+  if (newId && newId !== oldId) {
+    console.log('Route ID changed from', oldId, 'to', newId);
+    // Lade das neue Material
+    await loadMaterial(newId);
   }
-  if(material.value) {
+});
+
+// Extrahiere die Lade-Logik in eine separate Funktion
+const loadMaterial = async (materialId) => {
+  loading.value = true;
+  try {
+    // Versuche zuerst aus dem Store zu laden
+    material.value = materialsStore.getMaterialById(materialId);
+    
+    // Wenn nicht im Store, lade vom Backend
+    if (!material.value) {
+      console.log(`Material with ID ${materialId} not found in store, fetching from backend...`);
+      const fetchedMaterial = await materialsStore.fetchMaterialById(materialId);
+      console.log('Fetched material from backend:', fetchedMaterial);
+      material.value = fetchedMaterial;
+    }
+    
+    if (material.value) {
+      console.log('Setting material data:', material.value);
       editableContent.value = material.value.content || '';
       editableTitle.value = material.value.title || '';
       editableType.value = material.value.type || '';
       editableSubject.value = material.value.subject || '';
-      editableLanguageLevel.value = material.value.language?.level || 'B1';
-      editableVocabPercentage.value = material.value.language?.vocabPercentage || 30;
+      editableLanguageLevel.value = material.value.languageLevel || 'B1';
+      editableVocabPercentage.value = material.value.vocabPercentage || 30;
       editableTags.value = material.value.tags || [];
+      
+      console.log('Mapped fields:', {
+        content: editableContent.value,
+        title: editableTitle.value,
+        type: editableType.value,
+        subject: editableSubject.value,
+        languageLevel: editableLanguageLevel.value,
+        vocabPercentage: editableVocabPercentage.value,
+        tags: editableTags.value
+      });
+    } else {
+      console.error('No material data available after fetch');
+      showFeedback('Material konnte nicht gefunden werden', 'error');
+      router.push('/materials');
+    }
+  } catch (error) {
+    console.error('Error loading material:', error);
+    showFeedback('Fehler beim Laden des Materials', 'error');
+    router.push('/materials');
+  } finally {
+    loading.value = false;
   }
-  loading.value = false;
+};
+
+// Material laden
+onMounted(async () => {
+  if (route.params.id) {
+    await loadMaterial(route.params.id);
+  }
+});
+
+// Cleanup timeouts on unmount
+onBeforeUnmount(async () => {
+  try {
+    await materialsStore.fetchMaterials();
+  } catch (error) {
+    console.error('Error refreshing materials before unmount:', error);
+  }
 });
 
 // Save-Status-Logik
@@ -296,74 +336,29 @@ const markUnsaved = () => {
     }
 }
 
-const saveMetadata = async (field, value) => {
-    if (!material.value) return;
-    markUnsaved();
-    saveStatus.value = 'saving';
-    try {
-        let updateData = { id: material.value.id };
-        if (field.startsWith('language.')) {
-            const langField = field.split('.')[1];
-            updateData.language = { ...material.value.language, [langField]: value };
-        } else {
-            updateData[field] = value;
-        }
-        await materialsStore.updateMaterial(updateData);
-        if (field.startsWith('language.')) {
-             const langField = field.split('.')[1];
-             if (material.value.language) material.value.language[langField] = value;
-        } else {
-            material.value[field] = value;
-        }
-        saveStatus.value = 'saved';
-        showFeedback('Metadaten gespeichert', 'success');
-        if (field !== 'tags') uiStore.setLastEditedMaterial(material.value.id);
-    } catch (error) {
-        console.error(`Error saving metadata field ${field}:`, error);
-        saveStatus.value = 'error';
-        showFeedback('Fehler beim Speichern!', 'error');
-    }
-};
-
-// Debounced Title-Save
-const saveTitle = () => {
-    if (titleSaveTimeout.value) clearTimeout(titleSaveTimeout.value);
-    titleSaveTimeout.value = setTimeout(() => {
-        if (material.value && editableTitle.value !== material.value.title) {
-            saveMetadata('title', editableTitle.value);
-        }
-    }, 800);
-};
-watch(editableTitle, () => {
-    markUnsaved();
-    if (titleSaveTimeout.value) clearTimeout(titleSaveTimeout.value);
-    titleSaveTimeout.value = setTimeout(saveTitle, 1500);
-});
-
-// Auto-Save für Editor-Inhalt
-const saveContent = async () => {
-  if (material.value && editableContent.value !== material.value.content) {
-    saveStatus.value = 'saving';
-    try {
-      await materialsStore.updateMaterial({
-        id: material.value.id,
-        content: editableContent.value
-      });
-      material.value.content = editableContent.value;
-      saveStatus.value = 'saved';
-      showFeedback('Inhalt gespeichert', 'success');
-      uiStore.setLastEditedMaterial(material.value.id);
-    } catch (error) {
-      console.error('Error auto-saving content:', error);
-      saveStatus.value = 'error';
-      showFeedback('Fehler beim automatischen Speichern!', 'error');
-    }
-  }
-};
+// Watcher für Content-Änderungen (nur für Status-Update, kein Autosave)
 watch(editableContent, () => {
   markUnsaved();
-  if (contentSaveTimeout.value) clearTimeout(contentSaveTimeout.value);
-  contentSaveTimeout.value = setTimeout(saveContent, 2000);
+});
+
+watch(editableTitle, () => {
+  markUnsaved();
+});
+
+watch(editableType, () => {
+  markUnsaved();
+});
+
+watch(editableSubject, () => {
+  markUnsaved();
+});
+
+watch(editableLanguageLevel, () => {
+  markUnsaved();
+});
+
+watch(editableVocabPercentage, () => {
+  markUnsaved();
 });
 
 // Export-Dialog
@@ -381,7 +376,7 @@ const showFeedback = (text, color = 'success') => {
   snackbar.value = { show: true, text, color };
 };
 
-// Force Save
+// Force Save - now the only way to save
 const forceSave = async () => {
     if (!material.value) return;
     saveStatus.value = 'saving';
@@ -389,9 +384,23 @@ const forceSave = async () => {
         await materialsStore.updateMaterial({
             id: material.value.id,
             content: editableContent.value,
-            title: editableTitle.value,
+            topic: editableTitle.value,
+            materialType: editableType.value,
+            subject: editableSubject.value,
+            languageLevel: editableLanguageLevel.value,
+            vocabPercentage: editableVocabPercentage.value,
             tags: editableTags.value
         });
+        
+        // Update local material object
+        material.value.content = editableContent.value;
+        material.value.title = editableTitle.value;
+        material.value.type = editableType.value;
+        material.value.subject = editableSubject.value;
+        material.value.languageLevel = editableLanguageLevel.value;
+        material.value.vocabPercentage = editableVocabPercentage.value;
+        material.value.tags = editableTags.value;
+        
         saveStatus.value = 'saved';
         showFeedback('Material gespeichert', 'success');
         uiStore.setLastEditedMaterial(material.value.id);

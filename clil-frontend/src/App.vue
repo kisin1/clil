@@ -1,9 +1,13 @@
 <template>
-  <app-layout />
+  <v-app>
+    <DevToolbar />
+    <app-layout />
+  </v-app>
 </template>
 
 <script setup>
 import AppLayout from '@/components/Layout/AppLayout.vue';
+import DevToolbar from '@/components/DevToolbar.vue';
 // Keine weitere Logik hier nötig, da das Layout alles handhabt
 </script>
 
